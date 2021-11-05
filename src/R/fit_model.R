@@ -8,6 +8,10 @@ X = matrix(rnorm(1000), ncol = 2)
 beta = rnorm(ncol(X))
 y = 0.5 + X %*% beta + rnorm(nrow(X))
 
+# just so we can look at it later
+X_no_missing <- X
+X[which(1:nrow(X) %% 2 == 0),2] <- NA
+
 # so stan doesn't get mad
 y = as.vector(y)
 
@@ -33,7 +37,7 @@ X_notmissing = X_vector[which(!is.na(X_vector))]
 
 missing_by_column = colSums(is.na(X))
 notmissing_by_column = colSums(!is.na(X))
-
+start_pos = cum
 
 standata = list(
   K = ncol(X),
@@ -42,21 +46,20 @@ standata = list(
   N_total_known = length(notmissing_ids_vector),
   N_total_unknown = length(missing_ids_vector),
   x_known = X_notmissing,
-  x_unknown = X_missing,
   ii_obs = notmissing_ids_vector,
   ii_mis = missing_ids_vector,
   tau = 0.5,
   N_known = notmissing_by_column,
   N_unknown = missing_by_column,
-  cumulative_known = cumsum(notmissing_by_column),
-  cumulative_unknown = cumsum(missing_by_column)
+  start_pos_known = c(1, cumsum(notmissing_by_column) + 1)[1:ncol(X)],
+  start_pos_unknown = c(1, cumsum(missing_by_column) + 1)[1:ncol(X)]
 )
 
 options(mc.cores = 4)
 
 test = qreg_model$sample(data = standata, chains = 4, iter_sampling = 1000, iter_warmup = 1000)
 
-coef(quantreg::rq.fit.br(y = y, x = cbind(1,X), tau = 0.5))
+coef(quantreg::rq.fit.br(y = y[complete.cases(X)], x = cbind(1,X[complete.cases(X),]), tau = 0.5))
 test
 
 
