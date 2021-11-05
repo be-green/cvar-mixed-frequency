@@ -57,10 +57,12 @@ model {
     if(N_unknown[k] > 0) {
       // assumes scaled X variables
       // weakly informative prior in that case
-      X[1, k] ~ normal(0, 1);
+      X[1, k] ~ normal(0, 4);
       X[2:N, k] ~ normal(alpha_ar[k] + X[1:(N - 1), k] * beta_ar[k], sigma[k]);
     } else {
       sigma[k] ~ normal(0.01, 0.0001);
+      beta_ar[k] ~ normal(0.01, 0.0001);
+      alpha_ar[k] ~ normal(0.01, 0.0001);
     }
   }
   y ~ skew_double_exponential(alpha + X * beta, 1, tau);
