@@ -25,7 +25,7 @@ parameters {
 
   // ar(1) coefs
   real alpha_ar[K];
-  real<lower=-1, higher=1> beta_ar[K];
+  real<lower=-1, upper=1> beta_ar[K];
 
   real<lower=0.0000001> sigma[K]; // variance of the state-space model
   vector[N_total_unknown] x_unknown; // unknown
