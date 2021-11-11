@@ -127,22 +127,30 @@ in_sample <- melt(in_sample, c(".chain", ".iteration", ".draw"), variable.name =
 
 in_sample[, time_period := as.integer(str_extract(time_period, "[0-9]+"))]
 
-oos <- data.table(time_period = max(plot_data$time_period) + 1:500,
-                  Date = tail(data$DATE, 500),
-                  pred_y) %>%
-  melt(1:2, value.name = "pred_CVaR") %>%
-  group_by(Date) %>%
-  median_qi(.width = c(0.1, 0.25, 0.75, 0.8, 0.9, 0.95))
 
-
-plot_data <- draws %>%
+plot_data <- in_sample %>%
   group_by(time_period) %>%
   median_qi(.width = c(0.1, 0.25, 0.75, 0.8, 0.9, 0.95))
 
 
+oos <- data.table(time_period = max(plot_data$time_period) + 1:498,
+                  Date = tail(data$DATE, 498),
+                  pred_y) %>%
+  melt(1:2, value.name = "pred_CVaR") %>%
+  .[,time_period := NULL] %>%
+  .[,variable := NULL] %>%
+  group_by(Date) %>%
+  median_qi(.width = c(0.1, 0.25, 0.75, 0.8, 0.9, 0.95)) %>%
+  as.data.table
+
+oos[, Sample := "Out of Sample"]
 
 plot_data %>%
-  merge(data.frame(time_period = 1:nrow(data), Date = data$DATE)) %>%
+  merge(data.frame(time_period = 1:nrow(X), Date = data$DATE[1:nrow(X)])) %>%
+  as.data.table %>%
+  .[,time_period := NULL] %>%
+  .[,Sample := "In Sample"] %>%
+  rbind(oos) %>%
   ggplot(aes(x = Date, y = pred_CVaR, ymin = .lower,
              ymax = .upper, fill = factor(.width, levels = sort(unique(.width), decreasing = T)))) +
   geom_ribbon() +
