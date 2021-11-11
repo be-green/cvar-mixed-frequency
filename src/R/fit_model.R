@@ -9,11 +9,19 @@ data <- data[DATE > as.Date("1990-01-01")]
 data[,TR_CAPE := NULL]
 data[,TB3SMFFM := NULL]
 shift = 1
+X_oos = as.matrix(data[DATE >= as.Date("2020-01-01"),lapply(.SD, function(x) scale(as.numeric(x))), .SDcols = !c("DATE","SP500")])
 
-X = as.matrix(data[,lapply(.SD, function(x) scale(as.numeric(x))), .SDcols = !c("DATE","SP500")])
-y = data$SP500
+
+X = as.matrix(data[DATE < as.Date("2020-01-02"),lapply(.SD, function(x) scale(as.numeric(x))), .SDcols = !c("DATE","SP500")])
+y = data[DATE < as.Date("2020-01-02")]$SP500
 y = log(y[(1 + shift):length(y)]) - log(y[1:(length(y) - shift)])
 X = X[1:(nrow(X) - shift),]
+
+y_oos = data[DATE < as.Date("2020-01-01")]$SP500
+y_oos = log(y_oos[(1 + shift):length(y)]) - log(y_oos[1:(length(y_oos) - shift)])
+
+
+
 
 # this is necessary because Stan is bad
 # with ragged arrays...
@@ -68,12 +76,64 @@ library(tidybayes)
 library(ggplot2)
 draws <- tidy_draws(test)
 
-draws <- draws[, colnames(draws) %like% "y_pred|\\."]
-draws <- as.data.table(draws)
-draws <- melt(draws, c(".chain", ".iteration", ".draw"), variable.name = "time_period",
+ar_beta <- draws[, colnames(draws) %like% "beta_ar|\\."]
+ar_alpha <- draws[, colnames(draws) %like% "alpha_ar|\\."]
+
+# @param draw_row a single draw for the parameter vector
+# @param K dimension of the X matrix
+parse_draw <- function(new_X, draw_row, K, N) {
+
+  intercept <- rep(NA, K)
+  coefs <- matrix(nrow = K, ncol = K)
+  covmat <- matrix(nrow = K, ncol = K)
+  last_X <- matrix(nrow = 1, ncol = K)
+  beta <- c()
+
+  for(i in 1:K) {
+    intercept[i] <- draw_row[[paste0("alpha_ar[",i,"]")]]
+    beta[i] <- draw_row[[paste0("beta[",i,"]")]]
+    for(j in 1:K) {
+      coefs[i, j] <- draw_row[[paste0("beta_ar[",i,",", j, "]")]]
+      covmat[i, j] <- draw_row[[paste0("Sigma[",i,",", j, "]")]]
+    }
+    last_X[1,i] <- draw_row[[paste0("X[",N,",", i, "]")]]
+  }
+  covmat <- crossprod(covmat)
+
+  alpha <- draw_row[["alpha"]]
+
+  pred <- MASS::mvrnorm(n = 1, mu = as.vector(intercept + last_X %*% coefs), Sigma = covmat)
+
+  for(i in 1:(nrow(new_X))) {
+    missing <- which(is.na(new_X[i,]))
+    new_X[i, missing] <- pred[missing]
+    pred = MASS::mvrnorm(n = 1, mu = as.vector(intercept + new_X[i,] %*% coefs), Sigma = covmat)
+  }
+  alpha + new_X %*% beta
+}
+
+library(future.apply)
+
+plan(multisession(workers = 8))
+
+# matrix of predicted values
+pred_y <- future_apply(draws, 1, function(x) parse_draw(X_oos, x, ncol(X), N = nrow(X)), future.seed=TRUE)
+
+
+in_sample <- draws[, colnames(draws) %like% "y_pred|\\."]
+in_sample <- as.data.table(in_sample)
+in_sample <- melt(in_sample, c(".chain", ".iteration", ".draw"), variable.name = "time_period",
      value.name = "pred_CVaR")
 
-draws[, time_period := as.integer(str_extract(time_period, "[0-9]+"))]
+in_sample[, time_period := as.integer(str_extract(time_period, "[0-9]+"))]
+
+oos <- data.table(time_period = max(plot_data$time_period) + 1:500,
+                  Date = tail(data$DATE, 500),
+                  pred_y) %>%
+  melt(1:2, value.name = "pred_CVaR") %>%
+  group_by(Date) %>%
+  median_qi(.width = c(0.1, 0.25, 0.75, 0.8, 0.9, 0.95))
+
 
 plot_data <- draws %>%
   group_by(time_period) %>%
@@ -86,6 +146,7 @@ plot_data %>%
   ggplot(aes(x = Date, y = pred_CVaR, ymin = .lower,
              ymax = .upper, fill = factor(.width, levels = sort(unique(.width), decreasing = T)))) +
   geom_ribbon() +
+  geom_point(size = 0.01) +
   scale_fill_brewer() +
   labs(fill = "Interval",
          y = "Predicted 5th Percentile Return")
