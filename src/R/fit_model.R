@@ -58,6 +58,10 @@ standata = list(
 
 options(mc.cores = 4)
 
+# variational optimizes and objective assuming that the posterior
+# is a mixture of gaussians
+# much faster than MCMC, but can be less accurate
+# and more fragile since it's a point estimate (essentially)
 test = qreg_model$variational(data = standata)
 
 library(tidybayes)
