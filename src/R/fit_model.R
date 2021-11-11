@@ -2,18 +2,18 @@ library(cmdstanr)
 library(data.table)
 library(magrittr)
 
-qreg_model <- cmdstanr::cmdstan_model("src/Stan/qreg-missing-data.stan")
+qreg_model <- cmdstanr::cmdstan_model("src/Stan/qreg-missing-data-var.stan")
 
-X = matrix(rnorm(1000), ncol = 2)
-beta = rnorm(ncol(X))
-y = 0.5 + X %*% beta + rnorm(nrow(X))
+data <- fread("data/processed/time-series-data.csv")
+data <- data[DATE > as.Date("1990-01-01")]
+data[,TR_CAPE := NULL]
+data[,TB3SMFFM := NULL]
+shift = 1
 
-# just so we can look at it later
-X_no_missing <- X
-X[which(1:nrow(X) %% 2 == 0),2] <- NA
-
-# so stan doesn't get mad
-y = as.vector(y)
+X = as.matrix(data[,lapply(.SD, function(x) scale(as.numeric(x))), .SDcols = !c("DATE","SP500")])
+y = data$SP500
+y = log(y[(1 + shift):length(y)]) - log(y[1:(length(y) - shift)])
+X = X[1:(nrow(X) - shift),]
 
 # this is necessary because Stan is bad
 # with ragged arrays...
@@ -37,18 +37,19 @@ X_notmissing = X_vector[which(!is.na(X_vector))]
 
 missing_by_column = colSums(is.na(X))
 notmissing_by_column = colSums(!is.na(X))
-start_pos = cum
+
+y_scaled <- (y - mean(y)) / sd(y)
 
 standata = list(
   K = ncol(X),
   N = length(y),
-  y = y,
+  y = y_scaled,
   N_total_known = length(notmissing_ids_vector),
   N_total_unknown = length(missing_ids_vector),
   x_known = X_notmissing,
   ii_obs = notmissing_ids_vector,
   ii_mis = missing_ids_vector,
-  tau = 0.5,
+  tau = 0.05,
   N_known = notmissing_by_column,
   N_unknown = missing_by_column,
   start_pos_known = c(1, cumsum(notmissing_by_column) + 1)[1:ncol(X)],
@@ -57,9 +58,33 @@ standata = list(
 
 options(mc.cores = 4)
 
-test = qreg_model$sample(data = standata, chains = 4, iter_sampling = 1000, iter_warmup = 1000)
+test = qreg_model$variational(data = standata)
 
-coef(quantreg::rq.fit.br(y = y[complete.cases(X)], x = cbind(1,X[complete.cases(X),]), tau = 0.5))
-test
+library(tidybayes)
+library(ggplot2)
+draws <- tidy_draws(test)
+
+draws <- draws[, colnames(draws) %like% "y_pred|\\."]
+draws <- as.data.table(draws)
+draws <- melt(draws, c(".chain", ".iteration", ".draw"), variable.name = "time_period",
+     value.name = "pred_CVaR")
+
+draws[, time_period := as.integer(str_extract(time_period, "[0-9]+"))]
+
+plot_data <- draws %>%
+  group_by(time_period) %>%
+  median_qi(.width = c(0.1, 0.25, 0.75, 0.8, 0.9, 0.95))
+
+
+
+plot_data %>%
+  merge(data.frame(time_period = 1:nrow(data), Date = data$DATE)) %>%
+  ggplot(aes(x = Date, y = pred_CVaR, ymin = .lower,
+             ymax = .upper, fill = factor(.width, levels = sort(unique(.width), decreasing = T)))) +
+  geom_ribbon() +
+  scale_fill_brewer() +
+  labs(fill = "Interval",
+         y = "Predicted 5th Percentile Return")
+
 
 

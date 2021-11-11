@@ -60,4 +60,8 @@ model {
   }
   y ~ skew_double_exponential(alpha + X * beta, 1, tau);
 }
+generated quantities {
+  vector[N] y_pred;
+  y_pred = alpha + X * beta;
+}
 

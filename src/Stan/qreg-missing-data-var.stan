@@ -23,11 +23,14 @@ parameters {
   real alpha;           // intercept
   vector[K] beta;       // coefficients for predictors
 
-  // ar(1) coefs
-  real alpha_ar[K];
-  real<lower=-1, upper=1> beta_ar[K];
+  // https://mc-stan.org/docs/2_28/reference-manual/vector-and-matrix-data-types.html#cholesky-factors-of-covariance-matrices
+  cholesky_factor_corr[K] L_Omega;
 
-  real<lower=0.0000001> sigma[K]; // variance of the state-space model
+  // VARcoefs
+  row_vector[K] alpha_ar;
+  matrix<lower=-1, upper=1>[K, K] beta_ar;
+
+  vector<lower=0.0000001>[K] sigma; // variance of the state-space model
   vector[N_total_unknown] x_unknown; // unknown
 }
 transformed parameters {
@@ -52,18 +55,26 @@ transformed parameters {
 }
 model {
   sigma ~ student_t(3, 0, 1);
-  for(k in 1:K) {
-    if(N_unknown[k] > 0) {
-      // assumes scaled X variables
-      // weakly informative prior in that case
-      X[1, k] ~ normal(0, 4);
-      X[2:N, k] ~ normal(alpha_ar[k] + X[1:(N - 1), k] * beta_ar[k], sigma[k]);
-    } else {
-      sigma[k] ~ normal(0.01, 0.0001);
-      beta_ar[k] ~ normal(0.01, 0.0001);
-      alpha_ar[k] ~ normal(0.01, 0.0001);
+  beta ~ normal(0, 2);
+  L_Omega ~ lkj_corr_cholesky(1);
+
+  // stupid but it works
+  for (i in 1:K) {
+    for (j in 1:K) {
+      beta_ar[i, j] ~ normal(0, 2);
     }
+    alpha_ar[i] ~ normal(0, 1);
   }
+
+  // assumes scaled X variables
+  // weakly informative prior in that case
+  X[1, ] ~ normal(0, 4);
+  for (n in 2:N) {
+    X[n,] ~ multi_normal_cholesky(alpha_ar + X[n - 1, ] * beta_ar, diag_pre_multiply(sigma, L_Omega));
+  }
+  // tau is target quantile
+  // "scale" parameter technically exists but we always want it
+  // set to 1 for quantile regression
   y ~ skew_double_exponential(alpha + X * beta, 1, tau);
 }
 generated quantities {
