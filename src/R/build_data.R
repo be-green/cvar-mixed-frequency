@@ -1,4 +1,13 @@
+# set working directory to be the project base folder
+#setwd("./Documents/GitHub/cvar-mixed-frequency")
+
 # Build data from FRED and Shiller data
+
+if(!require(data.table)) install.packages("data.table")
+if(!require(readxl)) install.packages("readxl")
+if(!require(magrittr)) install.packages("magrittr")
+if(!require(stringr)) install.packages("stringr")
+if(!require(quantmod)) install.packages("quantmod")
 
 library(data.table)
 library(readxl)

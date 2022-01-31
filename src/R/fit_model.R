@@ -1,9 +1,30 @@
-library(cmdstanr)
+# set working directory to be the project base folder
+#setwd("./Documents/GitHub/cvar-mixed-frequency")
+
+# Install and Load relevant packages
+#####
+
+if(!require(cmdstanr)) {
+  install.packages("cmdstanr", repos = c("https://mc-stan.org/r-packages/", getOption("repos")))
+  install_cmdstan(cores = 2) # this natively sets the path
+  }
+if(!require(data.table)) install.packages("data.table")
+if(!require(magrittr)) install.packages("magrittr")
+if(!require(dplyr)) install.packages("dplyr")
+
+library(dplyr)
+library(cmdstanr) 
 library(data.table)
 library(magrittr)
 
+#####
+# Build Model
+#####
 qreg_model <- cmdstanr::cmdstan_model("src/Stan/qreg-missing-data-var.stan")
 
+#####
+# Load in Model Data
+#####
 data <- fread("data/processed/time-series-data.csv")
 data <- data[DATE > as.Date("1990-01-01")]
 data[,TR_CAPE := NULL]
@@ -72,8 +93,12 @@ options(mc.cores = 4)
 # and more fragile since it's a point estimate (essentially)
 test = qreg_model$variational(data = standata)
 
+if(!require(tidybayes)) install.packages("tidybayes")
+if(!require(ggplot2)) install.packages("ggplot2")
+
 library(tidybayes)
 library(ggplot2)
+
 draws <- tidy_draws(test)
 
 ar_beta <- draws[, colnames(draws) %like% "beta_ar|\\."]
@@ -112,6 +137,7 @@ parse_draw <- function(new_X, draw_row, K, N) {
   alpha + new_X %*% beta
 }
 
+if(!require(future.apply)) install.packages("future.apply")
 library(future.apply)
 
 plan(multisession(workers = 8))
