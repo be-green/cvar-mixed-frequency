@@ -103,6 +103,7 @@ draws <- tidy_draws(test)
 
 ar_beta <- draws[, colnames(draws) %like% "beta_ar|\\."]
 ar_alpha <- draws[, colnames(draws) %like% "alpha_ar|\\."]
+Sigma_test <- draws[, colnames(draws) %like% "igma|\\."] #lower case 'sigma' only pulls up i indexed variables
 
 # @param draw_row a single draw for the parameter vector
 # @param K dimension of the X matrix
@@ -143,7 +144,7 @@ library(future.apply)
 plan(multisession(workers = 8))
 
 # matrix of predicted values
-pred_y <- future_apply(draws, 1, function(x) parse_draw(X_oos, x, ncol(X), N = nrow(X)), future.seed=TRUE)
+pred_y <- future_apply(draws, 1, function(x) parse_draw(X_oos, x,K =  ncol(X), N = nrow(X)), future.seed=TRUE)
 
 
 in_sample <- draws[, colnames(draws) %like% "y_pred|\\."]
