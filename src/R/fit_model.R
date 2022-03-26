@@ -1,9 +1,30 @@
-library(cmdstanr)
+# set working directory to be the project base folder
+#setwd("./Documents/GitHub/cvar-mixed-frequency")
+
+# Install and Load relevant packages
+#####
+
+if(!require(cmdstanr)) {
+  install.packages("cmdstanr", repos = c("https://mc-stan.org/r-packages/", getOption("repos")))
+  install_cmdstan(cores = 2) # this natively sets the path
+  }
+if(!require(data.table)) install.packages("data.table")
+if(!require(magrittr)) install.packages("magrittr")
+if(!require(dplyr)) install.packages("dplyr")
+
+library(dplyr)
+library(cmdstanr) 
 library(data.table)
 library(magrittr)
 
+#####
+# Build Model
+#####
 qreg_model <- cmdstanr::cmdstan_model("src/Stan/qreg-missing-data-var.stan")
 
+#####
+# Load in Model Data
+#####
 data <- fread("data/processed/time-series-data.csv")
 data <- data[DATE > as.Date("2019-01-01")]
 data[,TR_CAPE := NULL]
@@ -72,8 +93,12 @@ options(mc.cores = 4)
 # and more fragile since it's a point estimate (essentially)
 test = qreg_model$sample(data = standata,iter_warmup = 100, iter_sampling = 100)
 
+if(!require(tidybayes)) install.packages("tidybayes")
+if(!require(ggplot2)) install.packages("ggplot2")
+
 library(tidybayes)
 library(ggplot2)
+
 draws <- tidy_draws(test)
 
 test_X <- draws[, colnames(draws) %like% "X\\["]
@@ -86,6 +111,7 @@ for(i in 1:ncol(test_X)) {
 
 ar_beta <- draws[, colnames(draws) %like% "beta_ar|\\."]
 ar_alpha <- draws[, colnames(draws) %like% "alpha_ar|\\."]
+Sigma_test <- draws[, colnames(draws) %like% "igma|\\."] #lower case 'sigma' only pulls up i indexed variables
 
 # @param draw_row a single draw for the parameter vector
 # @param K dimension of the X matrix
@@ -120,12 +146,13 @@ parse_draw <- function(new_X, draw_row, K, N) {
   alpha + new_X %*% beta
 }
 
+if(!require(future.apply)) install.packages("future.apply")
 library(future.apply)
 
 plan(multisession(workers = 8))
 
 # matrix of predicted values
-pred_y <- future_apply(draws, 1, function(x) parse_draw(X_oos, x, ncol(X), N = nrow(X)), future.seed=TRUE)
+pred_y <- future_apply(draws, 1, function(x) parse_draw(X_oos, x,K =  ncol(X), N = nrow(X)), future.seed=TRUE)
 
 
 in_sample <- draws[, colnames(draws) %like% "y_pred|\\."]
