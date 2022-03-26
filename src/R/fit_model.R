@@ -5,7 +5,7 @@ library(magrittr)
 qreg_model <- cmdstanr::cmdstan_model("src/Stan/qreg-missing-data-var.stan")
 
 data <- fread("data/processed/time-series-data.csv")
-data <- data[DATE > as.Date("1990-01-01")]
+data <- data[DATE > as.Date("2019-01-01")]
 data[,TR_CAPE := NULL]
 data[,TB3SMFFM := NULL]
 shift = 1
@@ -70,11 +70,19 @@ options(mc.cores = 4)
 # is a mixture of gaussians
 # much faster than MCMC, but can be less accurate
 # and more fragile since it's a point estimate (essentially)
-test = qreg_model$variational(data = standata)
+test = qreg_model$sample(data = standata,iter_warmup = 100, iter_sampling = 100)
 
 library(tidybayes)
 library(ggplot2)
 draws <- tidy_draws(test)
+
+test_X <- draws[, colnames(draws) %like% "X\\["]
+test_X <- test_X[1,]
+nms <- colnames(test_X)
+reformat_X <- matrix(ncol = ncol(X), nrow = nrow(X))
+for(i in 1:ncol(test_X)) {
+   eval(parse(text = paste0("reformat_", nms[i], " <- ", test_X[1,i])))
+}
 
 ar_beta <- draws[, colnames(draws) %like% "beta_ar|\\."]
 ar_alpha <- draws[, colnames(draws) %like% "alpha_ar|\\."]
