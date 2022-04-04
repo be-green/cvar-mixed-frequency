@@ -35,6 +35,8 @@ parameters {
 }
 transformed parameters {
   matrix[N, K] X;
+  array[N - 1] row_vector[K] var_mu;
+  array[N - 1] row_vector[K] X_array;
   // we need to do this so that we can re-format the missing observations in
   // the potentially multivariate X matrix
   // complicated version of this:
@@ -50,10 +52,19 @@ transformed parameters {
       // Same deal for N_unknown
       X[segment(ii_mis, start_pos_unknown[k], N_unknown[k]), k] = segment(x_unknown, start_pos_unknown[k], N_unknown[k]);
     }
+  }
 
+
+  for (n in 1:(N - 1)) {
+    var_mu[n] = alpha_ar + X[n, ] * beta_ar;
+  }
+
+  for(n in 1:(N - 1)) {
+    X_array[n] = X[n + 1,];
   }
 }
 model {
+
 
   // rules out really extreme stuff
   // everything is scaled to SD = 1 (outcomes & X matrices)
@@ -68,18 +79,18 @@ model {
   // stupid but it works
   for (i in 1:K) {
     for (j in 1:K) {
-      beta_ar[i, j] ~ normal(0, 2);
+      beta_ar[i, j] ~ normal(0, 4);
     }
     // assumes scaled X variables
     // weakly informative prior in that case
-    alpha_ar[i] ~ normal(0, 1);
+    alpha_ar[i] ~ normal(0, 4);
   }
 
   to_vector(X[1,]) ~ normal(0, 4);
+  to_vector(X_array[1]) ~ normal(0, 4);
 
-  for (n in 2:N) {
-    X[n,] ~ multi_normal_cholesky(alpha_ar + X[n - 1, ] * beta_ar, diag_pre_multiply(sigma, L_Omega));
-  }
+  target += multi_normal_cholesky_lpdf(X_array | var_mu, diag_pre_multiply(sigma, L_Omega));
+
   // tau is target quantile
   // "scale" parameter technically exists but we always want it
   // set to 1 for quantile regression

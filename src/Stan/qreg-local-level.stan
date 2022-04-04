@@ -1,5 +1,6 @@
+// The input data is a vector 'y' of length 'N'.
 data {
-  // we need to re-shape a giant vector into a matrix
+    // we need to re-shape a giant vector into a matrix
   // because Stan doesn't have ragged data structures
   int<lower=0> K;   // number of predictors
   int<lower=0> N; // number of observations
@@ -20,17 +21,11 @@ data {
   vector[N] y;      // outcome vector
 }
 parameters {
+  matrix[N, K] S;
   real alpha;           // intercept
   vector[K] beta;       // coefficients for predictors
-
-  // https://mc-stan.org/docs/2_28/reference-manual/vector-and-matrix-data-types.html#cholesky-factors-of-covariance-matrices
-  cholesky_factor_corr[K] L_Omega;
-
-  // VAR(1) coefs
-  row_vector[K] alpha_ar;
-  matrix<lower=-1, upper=1>[K, K] beta_ar;
-
-  vector<lower=0.0001>[K] sigma; // variance of the state-space model
+  real<lower=0.0000001> sigma[K]; // variance of the observation model
+  real<lower=0.0000001> nu[K]; // variance of the state-space model
   vector[N_total_unknown] x_unknown; // unknown
 }
 transformed parameters {
@@ -39,7 +34,6 @@ transformed parameters {
   // the potentially multivariate X matrix
   // complicated version of this:
   // https://mc-stan.org/docs/2_28/stan-users-guide/sliced-missing-data.html
-
   for (k in 1:K) {
     // assign to X the rows of the "observed index" with the known values
     // for column k
@@ -55,41 +49,35 @@ transformed parameters {
 }
 model {
 
-  // rules out really extreme stuff
-  // everything is scaled to SD = 1 (outcomes & X matrices)
-  // before going into the model
+  // priors on the observed variance and filtering variance
   sigma ~ student_t(3, 0, 1);
+  nu ~ student_t(3, 0, 1);
+
+  // weakly informative priors on the betas and alpha
+  // if these become too intrusive we can weaken them
+  // but for scaled data it should be ok
   beta ~ normal(0, 2);
   alpha ~ normal(0, 1);
 
-  // regularizes correlations towards 0
-  L_Omega ~ lkj_corr_cholesky(1.5);
+  for(k in 1:K) {
 
-  // stupid but it works
-  for (i in 1:K) {
-    for (j in 1:K) {
-      beta_ar[i, j] ~ normal(0, 2);
-    }
-    // assumes scaled X variables
-    // weakly informative prior in that case
-    alpha_ar[i] ~ normal(0, 1);
+    // S is the unknown state
+    S[1, k] ~ normal(0, 1);
+
+    // nu is the filtering variance
+    // we could also set up an equivalent backwards
+    // likelihood if we wanted to do a smoother
+    S[2:N, k] ~ normal(S[1:(N - 1), k], nu[k]);
+
+    // X is a local level based on S, which
+    // is never directly observed
+    X[, k] ~ normal(S[, k], sigma[k]);
   }
 
-  to_vector(X[1,]) ~ normal(0, 4);
-
-  for (n in 2:N) {
-    X[n,] ~ multi_normal_cholesky(alpha_ar + X[n - 1, ] * beta_ar, diag_pre_multiply(sigma, L_Omega));
-  }
-  // tau is target quantile
-  // "scale" parameter technically exists but we always want it
-  // set to 1 for quantile regression
+  // equivalent to a quantile regression
   y ~ skew_double_exponential(alpha + X * beta, 1, tau);
 }
 generated quantities {
-  matrix[K, K] Sigma;
-  Sigma = diag_pre_multiply(sigma, L_Omega);
   vector[N] y_pred;
   y_pred = alpha + X * beta;
 }
-
-
