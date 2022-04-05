@@ -33,13 +33,15 @@ library(zoo)
 bridge.functions <- function(dat,type){
   if(type == "mean"){
     tmp <- rollmean(dat,k=3,fill = T,align="right")
-    #tmp[index(tmp)%%3 != 0] <- NA
+    tmp[index(tmp)%%3 != 0] <- NA
   } else if (type == "weighted"){
     tmp <- filter(dat, c(.6,.3,.1), sides = 1)
+    tmp[index(tmp)%%3 != 0] <- NA
     # want to make this random
   } else if (type == "random"){
     a <- runif(3,min=0,max=.8)
     tmp <- filter(dat, a, sides = 1)
+    tmp[index(tmp)%%3 != 0] <- NA
   }
   return(tmp)
 }
@@ -47,8 +49,6 @@ bridge.functions <- function(dat,type){
 ######
 # State-Space Representation of the Variables
 ######
-
-rsltMat <- matrix(0,ncol= 2*(n.periods*n.depVars+1),nrow = n.obs)
 
 # matrix of parameters
 B2 <- matrix(round(runif(n.depVars+n.depVars*n.depVars*n.periods,-.5,.5),1),
@@ -62,7 +62,9 @@ B2 <- matrix(round(runif(n.depVars+n.depVars*n.depVars*n.periods,-.5,.5),1),
 #####
 
 # this is to test that the VAR recovers the true parameters appropriately, and there wasn't some mistake
-# it doesn't do the BEST, but does okay at nsim = 5000 (errors +/i 1e^-5)
+# it doesn't do the BEST, but does okay at nsim = 5000 (errors +/- 1e^-5)
+
+#rsltMat <- matrix(0,ncol= 2*(n.periods*n.depVars+1),nrow = n.obs)
 # for(i in 1:n.sim){
 
   x.star <- data.frame(VAR.sim(B=B2, n=n.obs,lag=3, include="const"))
@@ -94,19 +96,9 @@ x.obs[,2] <- bridge.functions(x.star[,2],type ="mean")
 
 beta <- c(2,4)
 
-#x <- runif(n.obs, 0, 4)
-#u <- rnorm(n.obs) # homoskedastic errors
-#y <- x*beta + u
-
-#plot(x, y)
-#abline(lm(y~x), lwd=2, col="blue")
-#rq(y~x, seq(0.1,0.9, by=0.1))
-#lapply(seq(0.1, 0.9, by=0.1), function(tt) abline(rq(y~x, tau=tt)))
-
 u <- 1/2*(x.star[,1]+x.star[,2])*rnorm(n.obs) # heteroskedastic errors
 y.obs <- as.matrix(x.star)%*%beta + u
 
 rq(y.obs~as.matrix(x.star), seq(0.1,0.9, by=0.1))
-
 rq(y.obs~as.matrix(x.obs), seq(0.1,0.9, by=0.1))
 
