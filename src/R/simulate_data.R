@@ -64,6 +64,7 @@ B2 <- matrix(round(runif(n.depVars+n.depVars*n.depVars*n.periods,-.5,.5),1),
 # this is to test that the VAR recovers the true parameters appropriately, and there wasn't some mistake
 # it doesn't do the BEST, but does okay at nsim = 5000 (errors +/- 1e^-5)
 
+
 rsltMat <- matrix(0,ncol= 2*(n.periods*n.depVars+1),nrow = n.obs)
 for(i in 1:n.sim){
 
@@ -74,7 +75,7 @@ for(i in 1:n.sim){
     var.test <- VAR(x.star,p=3)
     rsltMat[i,1:(n.depVars*n.periods+1)] <- coef(var.test)$y1[,1]-c(B2[1,2:dim(B2)[2]],B2[1,1])
     rsltMat[i,(n.depVars*n.periods+2):(2*(n.depVars*n.periods+1))] <- coef(var.test)$y2[,1]-c(B2[2,2:dim(B2)[2]],B2[2,1])
-    
+
   }
  }
 

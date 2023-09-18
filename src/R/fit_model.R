@@ -5,9 +5,12 @@
 #####
 
 if(!require(cmdstanr)) {
-  install.packages("cmdstanr", repos = c("https://mc-stan.org/r-packages/", getOption("repos")))
+  install.packages("cmdstanr",
+                   repos = c("https://mc-stan.org/r-packages/",
+                             getOption("repos")))
   install_cmdstan(cores = 2) # this natively sets the path
-  }
+}
+
 if(!require(data.table)) install.packages("data.table")
 if(!require(magrittr)) install.packages("magrittr")
 if(!require(dplyr)) install.packages("dplyr")
@@ -28,18 +31,15 @@ library(magrittr)
 #####
 # Build Model
 #####
-qreg_model <- cmdstanr::cmdstan_model("src/Stan/qreg-local-level.stan")
+qreg_model <- cmdstanr::cmdstan_model("src/Stan/qreg-missing-data-rw.stan")
 
 #####
 # Load in Model Data
 #####
 data <- fread("data/processed/time-series-data.csv")
 data <- data[DATE > as.Date("2017-01-01")]
-data[,TR_CAPE := NULL]
-data[,TB3SMFFM := NULL]
 shift = 1
 X_oos = as.matrix(data[DATE >= as.Date("2020-01-01"),lapply(.SD, function(x) scale(as.numeric(x))), .SDcols = !c("DATE","SP500")])
-
 
 X = as.matrix(data[DATE < as.Date("2020-01-02"),lapply(.SD, function(x) scale(as.numeric(x))), .SDcols = !c("DATE","SP500")])
 y = data[DATE < as.Date("2020-01-02")]$SP500
@@ -82,7 +82,7 @@ standata = list(
   x_known = X_notmissing,
   ii_obs = notmissing_ids_vector,
   ii_mis = missing_ids_vector,
-  tau = 0.05,
+  tau = 0.5,
   N_known = notmissing_by_column,
   N_unknown = missing_by_column,
   start_pos_known = c(1, cumsum(notmissing_by_column) + 1)[1:ncol(X)],
@@ -95,14 +95,18 @@ options(mc.cores = 4)
 # is a mixture of gaussians
 # much faster than MCMC, but can be less accurate
 # and more fragile since it's a point estimate (essentially)
-test = qreg_model$sample(data = standata,iter_warmup = 1000, iter_sampling = 1000,
-                         refresh = 10)
+test = qreg_model$sample(data = standata,iter_warmup = 400, iter_sampling = 400,
+                         refresh = 10, max_treedepth = 10)
+
+tmp = test$draws()
 
 draws <- tidy_draws(test)
 
 test_X <- draws[, colnames(draws) %like% "X\\["]
 test_X <- test_X[1,]
 nms <- colnames(test_X)
+
+reformat_X <- matrix(ncol = ncol(X), nrow = nrow(X))
 for(i in 1:ncol(test_X)) {
    eval(parse(text = paste0("reformat_", nms[i], " <- ", test_X[1,i])))
 }
@@ -150,7 +154,6 @@ plan(multisession(workers = 8))
 #
 # # matrix of predicted values
 # pred_y <- future_apply(draws, 1, function(x) parse_draw(X_oos, x,K =  ncol(X), N = nrow(X)), future.seed=TRUE)
-
 
 in_sample <- draws[, colnames(draws) %like% "y_pred|\\."]
 in_sample <- as.data.table(in_sample)
