@@ -1,0 +1,31 @@
+# stan_version_major = 2
+# stan_version_minor = 28
+# stan_version_patch = 1
+# model = qreg_missing_data_var_parallelized_model
+# method = variational
+#   variational
+#     algorithm = meanfield (Default)
+#       meanfield
+#     iter = 10000 (Default)
+#     grad_samples = 1 (Default)
+#     elbo_samples = 100 (Default)
+#     eta = 1 (Default)
+#     adapt
+#       engaged = 1 (Default)
+#       iter = 50 (Default)
+#     tol_rel_obj = 0.01 (Default)
+#     eval_elbo = 100 (Default)
+#     output_samples = 1000 (Default)
+# id = 1 (Default)
+# data
+#   file = /var/folders/2x/nxww648x6d5f2sdzl3t_4rz00000gr/T/RtmpmDtNvY/standata-c849316b5dd8.json
+# init = 2 (Default)
+# random
+#   seed = 875316615
+# output
+#   file = /var/folders/2x/nxww648x6d5f2sdzl3t_4rz00000gr/T/RtmpmDtNvY/qreg-missing-data-var-parallelized-202111130943-1-168c1a.csv
+#   diagnostic_file = /var/folders/2x/nxww648x6d5f2sdzl3t_4rz00000gr/T/RtmpmDtNvY/qreg-missing-data-var-parallelized-diagnostic-202111130943-1-7edbe7.csv
+#   refresh = 100 (Default)
+#   sig_figs = -1 (Default)
+#   profile_file = /var/folders/2x/nxww648x6d5f2sdzl3t_4rz00000gr/T/RtmpmDtNvY/qreg-missing-data-var-parallelized-profile-202111130943-1-5e6775.csv
+# num_threads = 1 (Default)
