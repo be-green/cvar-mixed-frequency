@@ -1,3 +1,9 @@
+if(!require(data.table)){install.packages("data.table")}
+if(!require(readr)){install.packages("readr")}
+if(!require(readxl)){install.packages("readxl")}
+if(!require(magrittr)){install.packages("magrittr")}
+if(!require(cmdstanr)){install.packages("cmdstanr", repos = c("https://mc-stan.org/r-packages/", getOption("repos")))}
+
 library(data.table)
 library(readr)
 library(readxl)
